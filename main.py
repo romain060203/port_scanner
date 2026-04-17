@@ -1,65 +1,69 @@
 # main.py
 import sys
-from scanner import scan_range
-from utils import validate_ip, parse_port_range
+from scanner import scan_ports
+from utils import validate_ip, validate_port, ask_yes_no
 
-def print_results(results):
-    open_ports = [p for p, open_ in results if open_]
-    if open_ports:
-        print("\nPorts ouverts:")
-        for p in open_ports:
-            print(f" - {p}")
-    else:
-        print("\nAucun port ouvert détecté dans la plage fournie.")
-    print("\nDétail complet:")
-    for port, is_open in results:
-        status = "OUVERT" if is_open else "FERMÉ"
-        print(f"{port:5d} : {status}")
-
-def prompt_and_scan():
-    target = input("Adresse IP cible: ").strip()
-    if not validate_ip(target):
-        print("Adresse IP invalide.")
-        return
-    pr = input("Plage de ports (ex: 20-80 ou 22): ").strip()
+def get_positive_float(prompt, default):
+    value = input(prompt).strip()
+    if value == "":
+        return default
     try:
-        start, end = parse_port_range(pr)
-    except Exception as e:
-        print("Plage invalide:", e)
-        return
-    try:
-        delay = float(input("Délai entre scans en secondes (ex: 0.1) [0]: ").strip() or "0")
+        number = float(value)
+        if number <= 0:
+            raise ValueError
+        return number
     except ValueError:
-        print("Délai invalide, utilisation de 0.")
-        delay = 0.0
-    try:
-        timeout = float(input("Timeout par connexion en secondes (ex: 1) [1]: ").strip() or "1")
-    except ValueError:
-        print("Timeout invalide, utilisation de 1.")
-        timeout = 1.0
-
-    print(f"\nScan de {target} ports {start}-{end} delay={delay}s timeout={timeout}s")
-    try:
-        results = scan_range(target, start, end, delay=delay, timeout=timeout)
-        print_results(results)
-    except KeyboardInterrupt:
-        print("\nScan interrompu par l'utilisateur.")
-    except Exception as e:
-        print("Erreur lors du scan:", e)
+        print("Valeur invalide, utilisation de la valeur par défaut.")
+        return default
 
 def main():
-    while True:
-        print("\n=== Port Scanner ===")
-        print("1. Lancer un scan")
-        print("2. Quitter")
-        choice = input("Choix: ").strip()
-        if choice == '1':
-            prompt_and_scan()
-        elif choice == '2':
-            print("Au revoir.")
-            sys.exit(0)
-        else:
-            print("Choix invalide.")
+    print("=== PORT SCANNER ===")
+    print("Utilise cet outil uniquement sur des machines locales ou autorisées.\n")
 
+    if not ask_yes_no("Confirmez-vous avoir l'autorisation de scanner cette cible ?"):
+        print("Scan annulé.")
+        sys.exit(0)
+
+    target = input("Adresse IP cible : ").strip()
+    if not validate_ip(target):
+        print("Erreur : adresse IP invalide.")
+        sys.exit(1)
+
+    start_port = input("Port de début : ").strip()
+    end_port = input("Port de fin : ").strip()
+
+    if not validate_port(start_port) or not validate_port(end_port):
+        print("Erreur : ports invalides.")
+        sys.exit(1)
+
+    start_port = int(start_port)
+    end_port = int(end_port)
+
+    if start_port > end_port:
+        print("Erreur : le port de début doit être inférieur ou égal au port de fin.")
+        sys.exit(1)
+
+    timeout = get_positive_float("Timeout en secondes [1.0] : ", 1.0)
+    delay = get_positive_float("Délai entre les scans en secondes [0.05] : ", 0.05)
+
+    print(f"\nScan de {target} sur les ports {start_port}-{end_port}...\n")
+
+    try:
+        open_ports = scan_ports(target, start_port, end_port, timeout=timeout, delay=delay)
+
+        if open_ports:
+            print("Ports ouverts détectés :")
+            for port in open_ports:
+                print(f"- {port}")
+        else:
+            print("Aucun port ouvert détecté.")
+
+    except KeyboardInterrupt:
+        print("\nScan interrompu par l'utilisateur.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Erreur inattendue : {e}")
+        sys.exit(1)
+        
 if name == "__main__":
     main()
